@@ -1,0 +1,27 @@
+﻿# Node
+node_modules/
+
+# Environment files
+**/.env
+
+# Build and public assets
+server/public/assets/
+server/public/uploads/
+server/uploads/
+
+# Editor and OS files
+.vscode/
+.DS_Store
+
+# Logs and temp
+npm-debug.log
+*.log
+
+# Dist/build
+dist/
+build/
+coverage/
+
+# Optional: client and server node_modules
+server/node_modules/
+vite_client/node_modules/
