@@ -1,0 +1,30 @@
+Set-Content -Path .gitignore -Value @"
+# Node
+node_modules/
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+.yarn/*
+.pnp.*
+.vite/
+dist/
+build/
+coverage/
+
+# Env
+.env
+.env.*.local
+server/.env
+vite_client/.env
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+*.log
+
+# App uploads/build artifacts
+server/uploads/
+server/public/uploads/
+server/public/assets/
+"@
