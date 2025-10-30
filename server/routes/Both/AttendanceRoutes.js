@@ -6,6 +6,7 @@ import {
   clockOut,
   getLogs,
   getTodayStatus,
+  getMyTodayStatus,
   getEmployeeList,
   getEmployeeAttendanceDetails,
   forceEndBreak
@@ -33,6 +34,9 @@ router.route("/employee/:employeeId/attendance")
 
 // Admin-only endpoints
 router.route("/today-status").get(isAdminAuthenticated, getTodayStatus);
+
+// Employee-only helper endpoint
+router.route("/my-today-status").get(isAuthenticated, getMyTodayStatus);
 
 export default router;
 

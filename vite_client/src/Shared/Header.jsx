@@ -194,7 +194,8 @@ const Header = () => {
                 </h3>
             </div>
 
-            <nav className="mt-6 flex-1">
+            {/* Make the nav scrollable so bottom sections (notifications/logout) stay visible */}
+            <nav className="mt-6 flex-1 overflow-y-auto">
                 {navItems.map((item) => (
                     <Link
                         key={item.path}
@@ -209,9 +210,11 @@ const Header = () => {
 
             {/* Notifications section */}
             <div className="p-4 border-t border-gray-700">
-                <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-300">Notifications</span>
-                    <NotificationDropdown />
+                <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm text-gray-300 font-medium">Notifications</span>
+                    <div className="relative">
+                        <NotificationDropdown />
+                    </div>
                 </div>
             </div>
 

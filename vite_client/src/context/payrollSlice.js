@@ -51,6 +51,22 @@ export const updatePayroll = createAsyncThunk(
   }
 );
 
+export const generatePayrolls = createAsyncThunk(
+  'payroll/generatePayrolls',
+  async ({ month, year }, thunkAPI) => {
+    try {
+      const response = await axios.post(
+        `${ADMIN_PAYROLL_ENDPOINT}/generate-bulk`,
+        { month, year },
+        { withCredentials: true }
+      );
+      return response.data;
+    } catch (error) {
+      return thunkAPI.rejectWithValue(error.response?.data?.message || error.message);
+    }
+  }
+);
+
 
 const payrollSlice = createSlice({
   name: 'payroll',
@@ -90,6 +106,16 @@ const payrollSlice = createSlice({
         if (index !== -1) {
           state.data[index] = updated;
         }
+      })
+      .addCase(generatePayrolls.pending, (state) => {
+        state.status = 'loading';
+      })
+      .addCase(generatePayrolls.fulfilled, (state) => {
+        state.status = 'succeeded';
+      })
+      .addCase(generatePayrolls.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = action.payload;
       });
   },
 });

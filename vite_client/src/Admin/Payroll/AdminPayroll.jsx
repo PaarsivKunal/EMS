@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { fetchPayrolls } from '../../context/payrollSlice'; // adjust path as needed
+import { fetchPayrolls, generatePayrolls } from '../../context/payrollSlice'; // adjust path as needed
 
 const AdminPayroll = () => {
     const dispatch = useDispatch();
@@ -33,9 +32,9 @@ const AdminPayroll = () => {
 
     const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
 
+    const currentUser = useSelector((state) => state.auth.user);
     useEffect(() => {
-        const token = localStorage.getItem('token');
-        if (!token) {
+        if (!currentUser) {
             navigate('/login');
             return;
         }
@@ -44,7 +43,7 @@ const AdminPayroll = () => {
             month: months[selectedMonth].label,
             year: selectedYear
         }));
-    }, [selectedMonth, selectedYear, dispatch, navigate, months]);
+    }, [selectedMonth, selectedYear, dispatch, navigate, months, currentUser]);
 
     const handleViewDetails = (employee) => {
         setSelectedEmployee(employee);
@@ -74,14 +73,25 @@ const AdminPayroll = () => {
 
             <div className="flex justify-between items-center mb-5">
                 <h2 className="text-2xl font-semibold text-gray-800 hidden sm:hidden lg:block">Employee Payroll</h2>
-                <Link to="/add-payroll">
+                <div className="flex gap-2">
                     <button
-                        onClick={handleCreatePayroll}
-                        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm"
+                        onClick={async () => {
+                            await dispatch(generatePayrolls({ month: months[selectedMonth].label, year: selectedYear }));
+                            dispatch(fetchPayrolls({ month: months[selectedMonth].label, year: selectedYear }));
+                        }}
+                        className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm"
                     >
-                        + Create Payroll
+                        Auto Generate
                     </button>
-                </Link>
+                    <Link to="/add-payroll">
+                        <button
+                            onClick={handleCreatePayroll}
+                            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm"
+                        >
+                            + Create Payroll
+                        </button>
+                    </Link>
+                </div>
             </div>
 
             <div className="bg-white p-5 rounded-lg shadow">

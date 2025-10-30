@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { clockIn, clockOut, breakIn, breakOut, fetchLogs } from '../../context/attendanceSlice';
+import { clockIn, clockOut, breakIn, breakOut, fetchLogs, fetchMyTodayStatus } from '../../context/attendanceSlice';
 import { format } from 'date-fns';
 import { FiClock, FiCheckCircle, FiAlertCircle, FiLoader, FiCoffee, FiArrowLeft } from 'react-icons/fi';
 
@@ -39,6 +39,18 @@ const AttendanceBox = () => {
         })).unwrap();
         console.log('Fetched logs result:', result);
         console.log('Sessions after fetch:', result.sessions);
+
+        // Fallback: if no sessions returned but user is already checked in, try today-status
+        if (!result?.sessions || result.sessions.length === 0) {
+          try {
+            const status = await dispatch(fetchMyTodayStatus()).unwrap();
+            if (status?.session && !status.session.clockOut) {
+              setCurrentSession(status.session);
+            }
+          } catch (e) {
+            // swallow - optional enrichment
+          }
+        }
       } catch (error) {
         console.error('Failed to fetch today\'s logs:', error);
         // If fetch fails, don't show error - might be page refresh issue
@@ -138,7 +150,16 @@ const AttendanceBox = () => {
   const handleClockIn = async () => {
     try {
       // Check if user already has an active session
-      const openSession = sessions.find(session => !session.clockOut);
+      const openSession = sessions.find(session => {
+        if (session.clockOut) return false;
+        // Ensure it is for current user and today
+        const sessionUserId = session.userId?._id || session.userId;
+        const currentUserId = currentUser?.id || currentUser?._id;
+        const belongsToUser = sessionUserId?.toString() === currentUserId?.toString();
+        const today = format(new Date(), 'yyyy-MM-dd');
+        const sessionDate = format(new Date(session.date), 'yyyy-MM-dd');
+        return belongsToUser && sessionDate === today;
+      });
 
       if (openSession) {
         // User already checked in - just refresh logs silently
@@ -148,6 +169,8 @@ const AttendanceBox = () => {
           startDate: today,
           endDate: today
         })).unwrap();
+        // Also reflect currentSession instantly for UX
+        setCurrentSession(openSession);
         return; // Don't try to check in again
       }
 
@@ -271,6 +294,19 @@ const AttendanceBox = () => {
     } catch (err) {
       const errorMessage = err?.message || 'Failed to start break';
       alert(errorMessage);
+      // If server says already on break, sync state immediately
+      if (errorMessage.toLowerCase().includes('already on break')) {
+        try {
+          const today = format(new Date(), 'yyyy-MM-dd');
+          const logs = await dispatch(fetchLogs({
+            startDate: today,
+            endDate: today
+          })).unwrap();
+          const open = logs?.sessions?.find(s => s.breaks?.some(b => b.breakIn && !b.breakOut));
+          setIsOnBreak(!!open);
+          setCurrentSession(open || currentSession);
+        } catch {}
+      }
     }
   };
 
@@ -332,7 +368,13 @@ const AttendanceBox = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => navigate('/dashboard-employee')}
+              onClick={async () => {
+                try {
+                  // Fire-and-forget notify admins about back action
+                  axios.post('/api/v1/both/notification/employee-back', {}, { withCredentials: true }).catch(() => {});
+                } catch {}
+                navigate('/dashboard-employee');
+              }}
               className="p-2 hover:bg-white/10 rounded-lg transition-colors"
               title="Go back to dashboard"
             >

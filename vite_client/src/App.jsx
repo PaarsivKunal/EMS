@@ -51,6 +51,7 @@ import IdCardView from './Employee/IdCardView';
 import SalaryStructureManager from './Admin/SalaryStructure/SalaryStructureManager';
 import AttendanceRules from './Admin/Attendance/AttendanceRules';
 import AdminSettings from './Admin/Settings/AdminSettings';
+import Notifications from './Both/Notifications';
 function App() {
     const location = useLocation();
     const hideHeaderRoutes = ['/', '/login', '/register']; // Routes where Header and Sidebar should not be shown
@@ -128,6 +129,7 @@ function App() {
                         <Route path="/employee/projects/:projectId" element={<EmployeeTasks />} />
                         <Route path="/employee/calendar" element={<EmployeeCalendar />} />
                         <Route path="/employee/id-card" element={<IdCardView />} />
+                        <Route path="/notifications" element={<Notifications />} />
                         
                         {/* Enhanced Features */}
                         {/* <Route path="/enhanced-attendance" element={<EnhancedAttendanceBox />} /> */}

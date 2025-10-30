@@ -245,41 +245,41 @@ function DashboardEmployee() {
             
             {/* Welcome Header */}
             <div className="mb-6">
-                <div className="bg-white rounded-xl shadow-md p-5 border border-gray-200">
-                    <div className="flex items-center justify-between">
+                <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200">
+                    <div className="flex items-center justify-between flex-wrap gap-4">
                         <div className="flex items-center gap-4">
-                    <ProfilePicture 
-                        user={user} 
+                            <ProfilePicture 
+                                user={user} 
                                 size="lg"
-                    />
-                    <div>
+                            />
+                            <div>
                                 <h1 className="text-xl font-semibold text-gray-800 mb-1">
                                     Welcome back, {user?.name || 'User'}!
                                 </h1>
                                 <p className="text-sm text-gray-600">{user?.jobTitle || 'Employee'}</p>
-                    </div>
-                </div>
-                        <div className="flex gap-2">
-                    <button 
-                        onClick={handleEditProfile}
+                            </div>
+                        </div>
+                        <div className="flex gap-2 flex-shrink-0">
+                            <button 
+                                onClick={handleEditProfile}
                                 className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition flex items-center gap-2 text-sm font-medium"
-                    >
+                            >
                                 <FaEdit className="w-4 h-4" />
                                 Edit
-                    </button>
+                            </button>
                             <Link to="/view-profile">
                                 <button className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition flex items-center gap-2 text-sm font-medium">
                                     <FaEye className="w-4 h-4" />
                                     View
-                        </button>
-                    </Link>
+                                </button>
+                            </Link>
                         </div>
                     </div>
                 </div>
             </div>
 
             {/* Quick Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
                 <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200">
                     <div className="flex items-center justify-between">
                         <div>

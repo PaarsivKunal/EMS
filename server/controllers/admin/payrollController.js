@@ -417,3 +417,68 @@ export const togglePayrollVisibility = async (req, res) => {
         });
     }
 };
+
+// Generate default payrolls for all employees for a given month/year if missing
+export const generatePayrollsForMonthYear = async (req, res) => {
+    try {
+        const { month, year } = req.body;
+        if (!month || !year) {
+            return res.status(400).json({ success: false, message: 'month and year are required' });
+        }
+
+        const employees = await Employee.find({ salary: { $exists: true } }).select('salary');
+        let created = 0;
+
+        for (const emp of employees) {
+            const exists = await Payroll.findOne({ employeeId: emp._id, month, year });
+            if (exists) continue;
+
+            const basicSalary = emp.salary || 0;
+            const earnings = {
+                basicWage: basicSalary,
+                houseRentAllowance: Math.round(basicSalary * 0.4),
+                transportAllowance: 2000,
+                medicalAllowance: 1500,
+                overtime: 0,
+                gratuity: 0,
+                specialAllowance: 0,
+                performanceBonus: 0,
+                projectBonus: 0,
+                attendanceBonus: 0,
+                pfEmployer: Math.round(basicSalary * 0.12),
+                esiEmployer: Math.round(basicSalary * 0.0325)
+            };
+            earnings.totalEarnings = Object.values(earnings).reduce((s, v) => s + (v || 0), 0);
+
+            const deductions = {
+                pfEmployee: Math.round(basicSalary * 0.12),
+                esiEmployee: Math.round(basicSalary * 0.0075),
+                professionalTax: 200,
+                incomeTax: Math.round(basicSalary * 0.1),
+                advanceSalary: 0,
+                loanDeduction: 0,
+                otherDeductions: 0
+            };
+            deductions.total = Object.values(deductions).reduce((s, v) => s + (v || 0), 0);
+
+            const payroll = new Payroll({
+                employeeId: emp._id,
+                month,
+                year,
+                basicSalary,
+                earnings,
+                deductions,
+                ctc: earnings.totalEarnings,
+                inHandSalary: earnings.totalEarnings - deductions.total,
+                status: 'Pending'
+            });
+            await payroll.save();
+            created += 1;
+        }
+
+        return res.json({ success: true, created });
+    } catch (error) {
+        console.error('Generate Payrolls Error:', error);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};

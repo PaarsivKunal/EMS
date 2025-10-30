@@ -128,6 +128,25 @@ export const fetchTodayStatus = createAsyncThunk(
   }
 );
 
+// Employee-only endpoint to get own today session (avoids admin-only route)
+export const fetchMyTodayStatus = createAsyncThunk(
+  'attendance/fetchMyTodayStatus',
+  async (_, { rejectWithValue }) => {
+    try {
+      const res = await axios.get(`${BOTH_ATTENDANCE_ENDPOINT}/my-today-status`, {
+        withCredentials: true
+      });
+      return res.data;
+    } catch (err) {
+      return rejectWithValue({
+        message: err.response?.data?.message || "Failed to get my today status",
+        status: err.response?.status,
+        data: err.response?.data
+      });
+    }
+  }
+);
+
 export const fetchAllAttendanceStats = createAsyncThunk(
   'attendance/fetchAllStats',
   async (params, { rejectWithValue }) => {
@@ -333,6 +352,16 @@ const attendanceSlice = createSlice({
         state.todayStatus = action.payload || [];
       })
       .addCase(fetchTodayStatus.rejected, rejected)
+
+      .addCase(fetchMyTodayStatus.pending, pending)
+      .addCase(fetchMyTodayStatus.fulfilled, (state, action) => {
+        state.loading = false;
+        const session = action.payload?.session;
+        if (session) {
+          state.sessions = [session];
+        }
+      })
+      .addCase(fetchMyTodayStatus.rejected, rejected)
 
       .addCase(fetchAllAttendanceStats.pending, pending)
       .addCase(fetchAllAttendanceStats.fulfilled, (state, action) => {

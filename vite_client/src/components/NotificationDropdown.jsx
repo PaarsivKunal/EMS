@@ -1,30 +1,82 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { FaBell, FaTimes, FaCheck, FaTrash } from 'react-icons/fa';
 import axios from 'axios';
 import { toast } from 'react-toastify';
+import { useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 
 const NotificationDropdown = () => {
     const [isOpen, setIsOpen] = useState(false);
     const [notifications, setNotifications] = useState([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [loading, setLoading] = useState(false);
+    const [dropdownPosition, setDropdownPosition] = useState({ top: 0, right: 0 });
+    const buttonRef = useRef(null);
+    const dropdownRef = useRef(null);
+    const navigate = useNavigate();
+    const authUser = useSelector((state) => state?.auth?.user);
 
     useEffect(() => {
+        // Only fetch when a user is available (authenticated)
+        if (!authUser) return;
         fetchNotifications();
         fetchUnreadCount();
         
         // Poll for new notifications every 30 seconds
         const interval = setInterval(() => {
-            fetchUnreadCount();
+            if (authUser) fetchUnreadCount();
         }, 30000);
 
         return () => clearInterval(interval);
-    }, []);
+    }, [authUser]);
+
+    // Calculate dropdown position when opening
+    useEffect(() => {
+        if (isOpen && buttonRef.current && typeof window !== 'undefined') {
+            try {
+                const buttonRect = buttonRef.current.getBoundingClientRect();
+                const viewportHeight = window.innerHeight;
+                const viewportWidth = window.innerWidth;
+                const dropdownMaxHeight = 512; // max-h-[32rem] = 32 * 16px = 512px
+                const spacing = 8; // 8px spacing
+                const spaceAbove = buttonRect.top;
+                const spaceBelow = viewportHeight - buttonRect.bottom;
+
+                // Determine best position: above if enough space, otherwise below
+                // Also check if positioning above would go negative (above viewport)
+                const positionAboveTop = buttonRect.top - dropdownMaxHeight - spacing;
+                const positionBelowTop = buttonRect.bottom + spacing;
+
+                if (spaceAbove > spaceBelow && spaceAbove > dropdownMaxHeight && positionAboveTop >= 0) {
+                    // Position above (but ensure it doesn't go above viewport)
+                    setDropdownPosition({
+                        top: Math.max(0, positionAboveTop),
+                        right: viewportWidth - buttonRect.right
+                    });
+                } else {
+                    // Position below (ensure it doesn't go below viewport)
+                    const maxBottom = viewportHeight - spacing;
+                    const calculatedTop = positionBelowTop;
+                    setDropdownPosition({
+                        top: Math.min(calculatedTop, maxBottom - dropdownMaxHeight),
+                        right: viewportWidth - buttonRect.right
+                    });
+                }
+            } catch (error) {
+                // Fallback positioning if calculation fails
+                console.error('Error calculating dropdown position:', error);
+                setDropdownPosition({
+                    top: 0,
+                    right: 0
+                });
+            }
+        }
+    }, [isOpen]);
 
     const fetchNotifications = async () => {
         try {
             setLoading(true);
-            const response = await axios.get('/api/v1/both/notification/user-notifications?limit=10', {
+            const response = await axios.get('/api/v1/both/notification/user-notifications?limit=10&unreadOnly=true', {
                 withCredentials: true
             });
 
@@ -32,7 +84,11 @@ const NotificationDropdown = () => {
                 setNotifications(response.data.notifications);
             }
         } catch (error) {
-            console.error('Error fetching notifications:', error);
+            // Gracefully ignore auth errors; avoid noisy console in UI
+            const status = error?.response?.status;
+            if (status !== 401 && status !== 403) {
+                console.error('Error fetching notifications:', error);
+            }
         } finally {
             setLoading(false);
         }
@@ -48,6 +104,11 @@ const NotificationDropdown = () => {
                 setUnreadCount(response.data.unreadCount);
             }
         } catch (error) {
+            const status = error?.response?.status;
+            if (status === 401 || status === 403) {
+                setUnreadCount(0);
+                return; // silently ignore
+            }
             console.error('Error fetching unread count:', error);
         }
     };
@@ -57,17 +118,17 @@ const NotificationDropdown = () => {
             await axios.patch(`/api/v1/both/notification/${notificationId}/read`, {}, {
                 withCredentials: true
             });
-
-            setNotifications(prev => 
-                prev.map(notification => 
-                    notification._id === notificationId 
-                        ? { ...notification, isRead: true }
-                        : notification
-                )
-            );
+            // Auto-delete after reading
+            try {
+                await axios.delete(`/api/v1/both/notification/${notificationId}`, { withCredentials: true });
+            } catch {}
+            setNotifications(prev => prev.filter(notification => notification._id !== notificationId));
             setUnreadCount(prev => Math.max(0, prev - 1));
         } catch (error) {
-            console.error('Error marking notification as read:', error);
+            const status = error?.response?.status;
+            if (status !== 401 && status !== 403) {
+                console.error('Error marking notification as read:', error);
+            }
         }
     };
 
@@ -76,14 +137,15 @@ const NotificationDropdown = () => {
             await axios.patch('/api/v1/both/notification/mark-all-read', {}, {
                 withCredentials: true
             });
-
-            setNotifications(prev => 
-                prev.map(notification => ({ ...notification, isRead: true }))
-            );
+            // Do not batch-delete to avoid 404 noise for legacy items
+            setNotifications([]);
             setUnreadCount(0);
             toast.success('All notifications marked as read');
         } catch (error) {
-            console.error('Error marking all notifications as read:', error);
+            const status = error?.response?.status;
+            if (status !== 401 && status !== 403) {
+                console.error('Error marking all notifications as read:', error);
+            }
         }
     };
 
@@ -103,7 +165,10 @@ const NotificationDropdown = () => {
                 setUnreadCount(prev => Math.max(0, prev - 1));
             }
         } catch (error) {
-            console.error('Error deleting notification:', error);
+            const status = error?.response?.status;
+            if (status !== 401 && status !== 403) {
+                console.error('Error deleting notification:', error);
+            }
         }
     };
 
@@ -151,6 +216,7 @@ const NotificationDropdown = () => {
     return (
         <div className="relative">
             <button
+                ref={buttonRef}
                 onClick={() => {
                     setIsOpen(!isOpen);
                     if (!isOpen) {
@@ -168,30 +234,44 @@ const NotificationDropdown = () => {
             </button>
 
             {isOpen && (
-                <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
-                    <div className="p-4 border-b border-gray-200">
-                        <div className="flex items-center justify-between">
-                            <h3 className="text-lg font-semibold text-gray-900">Notifications</h3>
-                            <div className="flex space-x-2">
+                <>
+                    {/* Backdrop to close on click outside */}
+                    <div 
+                        className="fixed inset-0 z-40 bg-transparent"
+                        onClick={() => setIsOpen(false)}
+                    />
+                    <div 
+                        ref={dropdownRef}
+                        className="fixed w-[15rem] sm:w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-[32rem] flex flex-col"
+                        style={{
+                            top: `${dropdownPosition.top}px`,
+                            right: `${dropdownPosition.right}px`
+                        }}
+                    >
+                    <div className="p-4 border-b border-gray-200 flex-shrink-0">
+                        <div className="flex items-center justify-between gap-2">
+                            <h3 className="text-base sm:text-lg font-semibold text-gray-900">Notifications</h3>
+                            <div className="flex items-center gap-2 flex-shrink-0">
                                 {unreadCount > 0 && (
                                     <button
                                         onClick={markAllAsRead}
-                                        className="text-xs text-blue-600 hover:text-blue-800"
+                                        className="text-xs text-blue-600 hover:text-blue-800 whitespace-nowrap font-medium"
                                     >
                                         Mark all read
                                     </button>
                                 )}
                                 <button
                                     onClick={() => setIsOpen(false)}
-                                    className="text-gray-400 hover:text-gray-600"
+                                    className="text-gray-400 hover:text-gray-600 p-1"
+                                    aria-label="Close notifications"
                                 >
-                                    <FaTimes />
+                                    <FaTimes className="w-4 h-4" />
                                 </button>
                             </div>
                         </div>
                     </div>
 
-                    <div className="max-h-96 overflow-y-auto">
+                    <div className="flex-1 overflow-y-auto min-h-0">
                         {loading ? (
                             <div className="p-4 text-center">
                                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
@@ -250,20 +330,21 @@ const NotificationDropdown = () => {
                     </div>
 
                     {notifications.length > 0 && (
-                        <div className="p-3 border-t border-gray-200 text-center">
+                        <div className="p-3 border-t border-gray-200 text-center flex-shrink-0 bg-gray-50">
                             <button
                                 onClick={() => {
                                     setIsOpen(false);
                                     // Navigate to full notifications page
-                                    window.location.href = '/notifications';
+                                    navigate('/notifications');
                                 }}
-                                className="text-sm text-blue-600 hover:text-blue-800"
+                                className="text-sm text-blue-600 hover:text-blue-800 font-medium"
                             >
                                 View all notifications
                             </button>
                         </div>
                     )}
-                </div>
+                    </div>
+                </>
             )}
         </div>
     );

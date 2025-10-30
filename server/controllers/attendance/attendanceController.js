@@ -1,5 +1,6 @@
 import Attendance from "../../models/attendance.model.js";
 import Employee from "../../models/employee.model.js"
+import AttendanceRule from "../../models/attendanceRule.model.js";
 import mongoose from 'mongoose';
 
 
@@ -25,6 +26,23 @@ export const clockIn = async (req, res) => {
   const startOfDay = new Date(today.setHours(0, 0, 0, 0));
 
   try {
+    // Load active attendance rule (if any)
+    const activeRule = await AttendanceRule.findOne({ isActive: true }).lean();
+
+    // Helper: distance in meters between two lat/lng points (Haversine)
+    const distanceInMeters = (lat1, lon1, lat2, lon2) => {
+      const toRad = (v) => (v * Math.PI) / 180;
+      const R = 6371000; // meters
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    };
+
     const existing = await Attendance.findOne({ userId, date: startOfDay });
     if (existing) {
       return res.status(400).json({
@@ -37,7 +55,13 @@ export const clockIn = async (req, res) => {
     const officeStartTime = new Date(startOfDay);
     officeStartTime.setHours(OFFICE_START_TIME, 0, 0, 0);
 
-    const isLateArrival = clockInTime > officeStartTime;
+    // Apply grace period for late arrival if rule enabled
+    let effectiveStartTime = new Date(officeStartTime);
+    if (activeRule?.enablePenaltyRules && activeRule?.penaltyRules?.lateArrival?.enabled) {
+      const graceMinutes = Number(activeRule.penaltyRules.lateArrival.gracePeriod || 0);
+      effectiveStartTime = new Date(officeStartTime.getTime() + graceMinutes * 60 * 1000);
+    }
+    const isLateArrival = clockInTime > effectiveStartTime;
 
     // Extract network information
     const networkInfo = {
@@ -54,6 +78,35 @@ export const clockIn = async (req, res) => {
       address: req.body.address,
       accuracy: req.body.accuracy
     };
+
+    // Enforce geofence if rule present and simple punches disabled
+    if (activeRule && !activeRule.enableSimplePunches) {
+      const empDept = req.employee?.department;
+      const appliesToDept = !activeRule.applicableDepartments?.length ||
+        (empDept && activeRule.applicableDepartments.includes(empDept));
+
+      if (appliesToDept) {
+        if (
+          typeof locationInfo.latitude !== 'number' ||
+          typeof locationInfo.longitude !== 'number'
+        ) {
+          return res.status(400).json({
+            message: 'Location is required to clock in at this site'
+          });
+        }
+        const dist = distanceInMeters(
+          locationInfo.latitude,
+          locationInfo.longitude,
+          activeRule.coordinates.latitude,
+          activeRule.coordinates.longitude
+        );
+        if (dist > (activeRule.maximumRadius || 500)) {
+          return res.status(400).json({
+            message: `Outside allowed radius (${Math.round(dist)}m > ${activeRule.maximumRadius}m)`
+          });
+        }
+      }
+    }
 
     // Handle image upload
     const imageInfo = {
@@ -192,6 +245,8 @@ export const clockOut = async (req, res) => {
   const startOfDay = new Date(today.setHours(0, 0, 0, 0));
 
   try {
+    // Load active rule to apply early-departure grace
+    const activeRule = await AttendanceRule.findOne({ isActive: true }).lean();
     const attendance = await Attendance.findOne({ userId: req.employee._id, date: startOfDay });
 
     if (!attendance || attendance.clockOut) {
@@ -245,7 +300,13 @@ export const clockOut = async (req, res) => {
     // Check for early departure
     const officeEndTime = new Date(startOfDay);
     officeEndTime.setHours(OFFICE_END_TIME, 0, 0, 0);
-    attendance.isEarlyDeparture = now < officeEndTime;
+    let effectiveEndTime = new Date(officeEndTime);
+    if (activeRule?.enablePenaltyRules && activeRule?.penaltyRules?.earlyDeparture?.enabled) {
+      const graceMinutes = Number(activeRule.penaltyRules.earlyDeparture.gracePeriod || 0);
+      // Allow leaving up to grace minutes early without flagging
+      effectiveEndTime = new Date(officeEndTime.getTime() - graceMinutes * 60 * 1000);
+    }
+    attendance.isEarlyDeparture = now < effectiveEndTime;
 
     // Calculate overtime (anything over 8 effective hours)
     if (attendance.effectiveHours > 8) {
@@ -465,6 +526,17 @@ export const getTodayStatus = async (req, res) => {
       message: error.message,
       error: error.stack 
     });
+  }
+};
+
+// Lightweight endpoint for employees to fetch only their own session for today
+export const getMyTodayStatus = async (req, res) => {
+  try {
+    const startOfDay = new Date(new Date().setHours(0, 0, 0, 0));
+    const session = await Attendance.findOne({ userId: req.employee._id, date: startOfDay });
+    res.json({ success: true, session });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 export const getEmployeeList = async (req, res) => {

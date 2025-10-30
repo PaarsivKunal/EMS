@@ -1,7 +1,8 @@
+ 
+import { sendBroadcastNotification, markNotificationAsRead, getUnreadNotificationCount } from "../../helpers/notificationService.js";
 import Notification from "../../models/notification.model.js";
 import User from "../../models/user.model.js";
 import Employee from "../../models/employee.model.js";
-import { sendBroadcastNotification, markNotificationAsRead, getUnreadNotificationCount } from "../../helpers/notificationService.js";
 
 export const createNotification = async (req, res) => {
   try {
@@ -217,5 +218,33 @@ export const deleteNotification = async (req, res) => {
       success: false, 
       error: error.message 
     });
+  }
+};
+
+// Employee action: notify all admins when employee taps "Back" in attendance
+export const notifyAdminsOnEmployeeBack = async (req, res) => {
+  try {
+    const employeeId = req.employee?._id;
+    if (!employeeId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const employee = await Employee.findById(employeeId).select('name email');
+    const admins = await User.find({ role: 'admin', isActive: true }).select('_id');
+
+    const message = `${employee?.name || 'An employee'} navigated back from Attendance`;
+
+    await Promise.all(admins.map(a => Notification.create({
+      recipient: a._id,
+      sender: employeeId,
+      message,
+      type: 'system',
+      priority: 'low',
+      metadata: { source: 'attendance', action: 'back' }
+    })));
+
+    return res.json({ success: true, message: 'Admins notified' });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
