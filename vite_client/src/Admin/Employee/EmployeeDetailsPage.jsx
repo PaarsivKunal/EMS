@@ -1,4 +1,15 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { 
+  Box, Button, Alert, Typography, Chip, Avatar,
+  CircularProgress, Card, CardContent, Grid,
+  Tooltip, IconButton, Snackbar,
+  Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
+  TextField, FormControl, InputLabel, Select, MenuItem,
+  TableContainer, Table, TableBody, TableRow, TableCell, TableHead,
+  Paper, Accordion, AccordionSummary, AccordionDetails
+} from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import { useTheme } from '@mui/material/styles';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useSelector, useDispatch } from 'react-redux';
@@ -34,6 +45,7 @@ import {
 } from 'react-icons/fi';
 
 const EmployeeDetailsPage = () => {
+  const theme = useTheme();
   const { employeeId } = useParams();
   const navigate = useNavigate();
   const dispatch = useDispatch();

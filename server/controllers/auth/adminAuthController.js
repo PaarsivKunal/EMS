@@ -8,9 +8,9 @@ export const registerUser = async (req, res) => {
     try {
         const { name, email, password } = req.body;
 
-        // Validate email domain
-        if (!email.endsWith('@gmail.com')) {
-            return res.status(400).json({ message: 'Only Gmail addresses are allowed for registration' });
+        // Basic validation
+        if (!name || !email || !password) {
+            return res.status(400).json({ message: 'Name, email and password are required' });
         }
 
         // Check if user already exists
@@ -19,12 +19,12 @@ export const registerUser = async (req, res) => {
             return res.status(400).json({ message: 'Email already registered' });
         }
 
-        // Create new user
+        // Create new user (defaults to admin role as per model defaults/config)
         const newUser = new User({ name, email, password });
         await newUser.save();
 
         // Generate JWT token
-        generateToken(newUser._id, res);
+        generateToken(newUser._id, newUser.role, res);
 
         // Return success response with user data
         res.status(201).json({
@@ -52,10 +52,18 @@ export const loginUser = async (req, res) => {
             });
         }
 
-        // Determine user type and authenticate
-        const isAdmin = email.endsWith('@gmail.com');
-        const userModel = isAdmin ? User : Employee;
-        const user = await userModel.findOne({ email }).select('+password');
+        // Look up user across collections
+        let user = await User.findOne({ email }).select('+password');
+        let role = 'admin';
+        let isEmployee = false;
+        if (!user) {
+            const employee = await Employee.findOne({ email }).select('+password');
+            if (employee) {
+                user = employee;
+                role = 'employee';
+                isEmployee = true;
+            }
+        }
 
         // Authentication checks
         if (!user) {
@@ -66,7 +74,7 @@ export const loginUser = async (req, res) => {
         }
 
         // Check if employee is active
-        if (!isAdmin && !user.active) {
+        if (isEmployee && !user.active) {
             return res.status(403).json({ 
                 success: false,
                 message: 'Account inactive',
@@ -75,7 +83,7 @@ export const loginUser = async (req, res) => {
         }
 
         // Verify password
-        const isPasswordValid = isAdmin 
+        const isPasswordValid = role === 'admin'
             ? await user.comparePassword(password)
             : await bcrypt.compare(password, user.password);
 
@@ -87,16 +95,16 @@ export const loginUser = async (req, res) => {
         }
 
         // Generate token and prepare user data
-        const token = generateToken(user._id, isAdmin ? user.role : 'employee', res);
+        generateToken(user._id, role, res);
         const userData = {
             id: user._id,
             name: user.name,
             email: user.email,
-            role: isAdmin ? user.role : 'employee'
+            role
         };
 
         // Add employee-specific fields if needed
-        if (!isAdmin) {
+        if (isEmployee) {
             userData.position = user.position;
             userData.department = user.department;
         }
@@ -105,7 +113,6 @@ export const loginUser = async (req, res) => {
         return res.status(200).json({
             success: true,
             message: 'Login successful',
-            token,
             user: userData
         });
 
@@ -121,11 +128,22 @@ export const loginUser = async (req, res) => {
 
 export const logoutUser = async (req, res) => {
     try {
-        // Clear the JWT cookie
-        res.clearCookie('jwt', {
+        // Clear auth and CSRF cookies with environment-aware options
+        const crossSite = String(process.env.CROSS_SITE_COOKIES).toLowerCase() === 'true';
+        const cookieOptions = {
             httpOnly: true,
-            secure: process.env.NODE_ENV !== 'development',
-            sameSite: 'strict',
+            sameSite: crossSite ? 'none' : 'lax',
+            secure: crossSite || process.env.NODE_ENV === 'production',
+            path: '/',
+        };
+
+        res.clearCookie('jwt', cookieOptions);
+        // Clear CSRF helper cookie as well (not httpOnly by design)
+        res.clearCookie('csrfToken', {
+            httpOnly: false,
+            sameSite: cookieOptions.sameSite,
+            secure: cookieOptions.secure,
+            path: '/',
         });
 
         // Return success response

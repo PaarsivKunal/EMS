@@ -24,6 +24,11 @@ const connectDB = async (retries = 5, delay = 5000) => {
                 console.log('MongoDB connection closed through app termination');
                 process.exit(0);
             });
+            process.on('SIGTERM', async () => {
+                await mongoose.connection.close();
+                console.log('MongoDB connection closed due to SIGTERM');
+                process.exit(0);
+            });
             
             return; // Success, exit retry loop
             

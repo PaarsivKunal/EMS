@@ -13,7 +13,6 @@ export default defineConfig({
   },
   optimizeDeps: {
     exclude: [
-      'chunk-UBDIXFPO',
       'html2canvas',
       'qrcode',
       'bootstrap-icons'

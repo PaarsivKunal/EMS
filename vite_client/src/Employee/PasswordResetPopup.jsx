@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import axios from '../utils/axios';
 import { EMPLOYEE_AUTH_ENDPOINT } from '../utils/constant';
 import { FaTimes } from 'react-icons/fa'; // Using react-icons which is already installed
 
-export default function PasswordResetPopup({ onClose }) {
+export default function PasswordResetPopup({ onClose, onSuccess }) {
   const [passwords, setPasswords] = useState({
     newPassword: '',
     confirmPassword: ''
@@ -32,6 +32,10 @@ export default function PasswordResetPopup({ onClose }) {
 
       if (response.data.message === 'Password reset successful.') {
         setSuccess(true);
+        // notify parent with new password to re-login
+        if (onSuccess) {
+          setTimeout(() => onSuccess(passwords.newPassword), 300);
+        }
       }
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to reset password');

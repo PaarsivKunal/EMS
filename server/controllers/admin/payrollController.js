@@ -1,5 +1,8 @@
 import Payroll from "../../models/payroll.model.js";
 import Employee from"../../models/employee.model.js"
+import Attendance from "../../models/attendance.model.js";
+import Leave from "../../models/leave.model.js";
+import { transferToBank } from "../../helpers/paymentService.js";
 
 
 
@@ -429,22 +432,64 @@ export const generatePayrollsForMonthYear = async (req, res) => {
         const employees = await Employee.find({ salary: { $exists: true } }).select('salary');
         let created = 0;
 
+        // Helper: calculate working days (Mon-Fri) in target month
+        const monthIndex = new Date(`${month} 1, ${year}`).getMonth();
+        const startOfMonth = new Date(year, monthIndex, 1);
+        const endOfMonth = new Date(year, monthIndex + 1, 0);
+
+        const workingDaysInMonth = (() => {
+            let working = 0;
+            for (let d = new Date(startOfMonth); d <= endOfMonth; d.setDate(d.getDate() + 1)) {
+                const day = d.getDay();
+                if (day !== 0 && day !== 6) working += 1; // Mon-Fri
+            }
+            return working || 1; // avoid division by zero
+        })();
+
         for (const emp of employees) {
             const exists = await Payroll.findOne({ employeeId: emp._id, month, year });
             if (exists) continue;
 
             const basicSalary = emp.salary || 0;
+            
+            // Attendance aggregation for the month
+            const attendanceRecords = await Attendance.find({
+                userId: emp._id,
+                date: { $gte: startOfMonth, $lte: endOfMonth }
+            });
+
+            const presentDays = attendanceRecords.filter(r => ['present', 'loggedOut'].includes(r.status)).length;
+            const halfDays = attendanceRecords.filter(r => r.status === 'half-day').length;
+            const totalOvertimeHours = attendanceRecords.reduce((sum, r) => sum + (r.overtimeHours || 0), 0);
+
+            // Approved leaves within month
+            const approvedLeaves = await Leave.find({
+                employee: emp._id,
+                status: 'approved',
+                $or: [
+                    { startDate: { $lte: endOfMonth }, endDate: { $gte: startOfMonth } }
+                ]
+            });
+            const leaveDays = approvedLeaves.reduce((sum, lv) => sum + (lv.duration || 0), 0);
+
+            const effectivePresent = presentDays + (halfDays * 0.5) + leaveDays;
+            const unpaidDays = Math.max(0, workingDaysInMonth - effectivePresent);
+            const perDayRate = basicSalary / workingDaysInMonth;
+            const adjustedBasic = Math.max(0, Math.round(basicSalary - unpaidDays * perDayRate));
+            const overtimeRatePerHour = perDayRate / 8;
+            const overtimePay = Math.round(totalOvertimeHours * overtimeRatePerHour);
+
             const earnings = {
-                basicWage: basicSalary,
+                basicWage: adjustedBasic,
                 houseRentAllowance: Math.round(basicSalary * 0.4),
                 transportAllowance: 2000,
                 medicalAllowance: 1500,
-                overtime: 0,
+                overtime: overtimePay,
                 gratuity: 0,
                 specialAllowance: 0,
                 performanceBonus: 0,
                 projectBonus: 0,
-                attendanceBonus: 0,
+                attendanceBonus: unpaidDays === 0 ? 0 : 0,
                 pfEmployer: Math.round(basicSalary * 0.12),
                 esiEmployer: Math.round(basicSalary * 0.0325)
             };
@@ -479,6 +524,92 @@ export const generatePayrollsForMonthYear = async (req, res) => {
         return res.json({ success: true, created });
     } catch (error) {
         console.error('Generate Payrolls Error:', error);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// Disburse payrolls for a given month/year
+export const disbursePayrolls = async (req, res) => {
+    try {
+        const adminId = req.user?._id;
+        const { month, year } = req.body;
+        if (!month || !year) {
+            return res.status(400).json({ success: false, message: 'month and year are required' });
+        }
+
+        // Fetch payrolls eligible for payment (Processed or Pending depending on policy)
+        const payrolls = await Payroll.find({ month, year, status: { $in: ['Processed', 'Pending'] } })
+            .populate('employeeId', 'financialDetails name lastName');
+
+        if (!payrolls.length) {
+            return res.json({ success: true, total: 0, paid: 0, failed: 0, results: [] });
+        }
+
+        const results = [];
+        let paid = 0;
+        let failed = 0;
+
+        for (const pr of payrolls) {
+            const employee = pr.employeeId;
+            const fin = employee?.financialDetails || {};
+            const amount = Math.round(pr.inHandSalary || 0);
+
+            const transfer = await transferToBank({
+                amount,
+                beneficiary: {
+                    accountNo: fin.accountNo,
+                    ifsc: fin.ifsc,
+                    accountName: fin.accountName,
+                    bankName: fin.bankName
+                }
+            });
+
+            if (transfer.success) {
+                pr.status = 'Paid';
+                pr.paidDate = new Date();
+                pr.lastModifiedBy = adminId;
+                pr.payment = {
+                    provider: transfer.provider,
+                    reference: transfer.reference,
+                    status: 'Success',
+                    processedAt: new Date()
+                };
+                await pr.save();
+                paid += 1;
+                results.push({ 
+                    payrollId: pr._id, 
+                    employee: employee._id, 
+                    employeeName: `${employee.name || ''} ${employee.lastName || ''}`.trim(),
+                    employeeEmail: employee.email,
+                    amount, 
+                    status: 'Success', 
+                    reference: transfer.reference 
+                });
+            } else {
+                pr.payment = {
+                    provider: 'mock-bank',
+                    status: 'Failed',
+                    processedAt: new Date(),
+                    error: transfer.error
+                };
+                pr.lastModifiedBy = adminId;
+                await pr.save();
+                failed += 1;
+                results.push({ 
+                    payrollId: pr._id, 
+                    employee: employee._id, 
+                    employeeName: `${employee.name || ''} ${employee.lastName || ''}`.trim(),
+                    employeeEmail: employee.email,
+                    amount, 
+                    status: 'Failed', 
+                    error: transfer.error 
+                });
+            }
+        }
+
+        return res.json({ success: true, total: payrolls.length, paid, failed, results });
+    } catch (error) {
+        console.error('Disburse Payrolls Error:', error);
         return res.status(500).json({ success: false, message: error.message });
     }
 };

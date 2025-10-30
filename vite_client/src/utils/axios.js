@@ -8,6 +8,19 @@ const instance = axios.create({
 // Request interceptor to add debugging (only in development)
 instance.interceptors.request.use(
   (config) => {
+    // Add CSRF header for state-changing requests if token cookie exists
+    try {
+      const method = (config.method || 'get').toLowerCase();
+      if (typeof document !== 'undefined' && ['post','put','patch','delete'].includes(method)) {
+        const csrfCookie = document.cookie.split('; ').find(c => c.startsWith('csrfToken='));
+        const csrf = csrfCookie ? csrfCookie.split('=')[1] : undefined;
+        if (csrf) {
+          config.headers = config.headers || {};
+          config.headers['x-csrf-token'] = csrf;
+        }
+      }
+    } catch (_) {}
+
     // Only log in development, never log cookies
     if (import.meta.env.DEV) {
       console.log('Making request to:', config.url);

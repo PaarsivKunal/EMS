@@ -4,9 +4,11 @@ import { useDispatch, useSelector } from 'react-redux';
 import { setLoading, setUser } from '../context/Auth/authSlice';
 import { toast } from 'react-toastify';
 import axios from '../utils/axios';
+import PasswordResetPopup from '../Employee/PasswordResetPopup';
 
 function Login() {
     const [form, setForm] = useState({ email: '', password: '' });
+    const [showReset, setShowReset] = useState(false);
     const dispatch = useDispatch();
     const navigate = useNavigate();
     const { loading, user } = useSelector(state => state.auth);
@@ -76,14 +78,16 @@ function Login() {
                 localStorage.setItem('role', userRole);
                 localStorage.setItem('email', form.email);
 
+                // If employee must reset password, show popup and pause navigation
+                if (userRole === 'employee' && userData?.mustResetPassword) {
+                    toast.info('Please reset your password to continue.');
+                    setShowReset(true);
+                    return;
+                }
+
                 toast.success('Login successful!');
-                
-                // Force navigation after state update
-                setTimeout(() => {
-                    const redirectPath = userRole === 'admin' ? '/dashboard-admin' : '/dashboard-employee';
-                    console.log('Force navigating to:', redirectPath);
-                    window.location.href = redirectPath;
-                }, 500);
+                const redirectPath = userRole === 'admin' ? '/dashboard-admin' : '/dashboard-employee';
+                setTimeout(() => { window.location.href = redirectPath; }, 500);
             } else {
                 console.log('Login failed:', { status: response.status, success: data.success, message: data.message });
                 toast.error(data.message || 'Login failed');
@@ -109,6 +113,7 @@ function Login() {
     };
 
     return (
+        <>
         <div className="flex justify-center items-center min-h-screen bg-cover bg-center bg-fixed"
              style={{ backgroundImage: "url('../media/Untitled-2 (2).png')" }}>
             <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-sm text-center">
@@ -155,6 +160,34 @@ function Login() {
 </Link>
             </div>
         </div>
+        {showReset && (
+            <PasswordResetPopup 
+                onClose={() => setShowReset(false)} 
+                onSuccess={async (newPassword) => {
+                    // Attempt to logout the existing session; ignore failures
+                    try {
+                        await axios.get('/v1/employee/auth/logout', { withCredentials: true });
+                    } catch {
+                        // Ignore logout errors
+                    }
+
+                    // Attempt to login with the new password; if it fails, inform and close popup
+                    try {
+                        await axios.post(
+                            '/v1/employee/auth/login',
+                            { email: form.email, password: newPassword },
+                            { withCredentials: true }
+                        );
+                        toast.success('Password updated and logged in.');
+                        window.location.href = '/dashboard-employee';
+                    } catch {
+                        toast.info('Password updated. Please login with your new password.');
+                        setShowReset(false);
+                    }
+                }}
+            />
+        )}
+        </>
     );
 }
 

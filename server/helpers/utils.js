@@ -8,15 +8,16 @@ export const generateToken = (userId, role = null, res = null) => {
         const token = jwt.sign(
             payload,
             process.env.JWT_SECRET,
-            { expiresIn: "7d" }
+            { expiresIn: process.env.JWT_EXPIRE || "7d" }
         );
 
         if (res) {
+            const crossSite = String(process.env.CROSS_SITE_COOKIES).toLowerCase() === 'true';
             const cookieOptions = {
-                maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+                maxAge: 7 * 24 * 60 * 60 * 1000,
                 httpOnly: true,
-                sameSite: 'strict',
-                secure: process.env.NODE_ENV === 'production',
+                sameSite: crossSite ? 'none' : 'lax',
+                secure: crossSite || process.env.NODE_ENV === 'production',
                 path: '/',
             };
 
@@ -26,6 +27,17 @@ export const generateToken = (userId, role = null, res = null) => {
             }
 
             res.cookie('jwt', token, cookieOptions);
+
+            // Issue CSRF token for double-submit cookie strategy
+            const csrfToken = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+            const csrfCookieOptions = {
+                maxAge: cookieOptions.maxAge,
+                httpOnly: false,
+                sameSite: cookieOptions.sameSite,
+                secure: cookieOptions.secure,
+                path: '/',
+            };
+            res.cookie('csrfToken', csrfToken, csrfCookieOptions);
         }
 
         return token;

@@ -76,7 +76,14 @@ const payrollSchema = new mongoose.Schema({
         ref: 'User'
     },
     processedDate: Date,
-    paidDate: Date
+    paidDate: Date,
+    payment: {
+        provider: { type: String },
+        reference: { type: String },
+        status: { type: String, enum: ['Success', 'Failed', 'Pending'] },
+        processedAt: { type: Date },
+        error: { type: String }
+    }
 }, {
     timestamps: true
 });

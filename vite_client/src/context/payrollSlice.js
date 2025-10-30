@@ -3,6 +3,19 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axios from 'axios';
 import { ADMIN_PAYROLL_ENDPOINT } from '../utils/constant';
 
+// Helper to read and decode cookie values (non-HTTPOnly only)
+function getCookie(name) {
+  const match = document.cookie
+    .split('; ')
+    .find((row) => row.startsWith(name + '='));
+  if (!match) return undefined;
+  try {
+    return decodeURIComponent(match.split('=')[1]);
+  } catch (e) {
+    return match.split('=')[1];
+  }
+}
+
 export const fetchPayrolls = createAsyncThunk(
   'payroll/fetchPayrolls',
   async ({ month, year }, thunkAPI) => {
@@ -23,10 +36,11 @@ export const createPayroll = createAsyncThunk(
   'payroll/createPayroll',
   async (payrollData, thunkAPI) => {
     try {
+      const csrf = getCookie('csrfToken');
       const response = await axios.post(
         `${ADMIN_PAYROLL_ENDPOINT}/create-payroll`,
         payrollData,
-        { withCredentials: true }
+        { withCredentials: true, headers: { 'x-csrf-token': csrf } }
       );
       return response.data;
     } catch (error) {
@@ -39,10 +53,11 @@ export const updatePayroll = createAsyncThunk(
   'payroll/updatePayroll',
   async ({ payrollId, updatedData }, thunkAPI) => {
     try {
+      const csrf = getCookie('csrfToken');
       const response = await axios.put(
         `${ADMIN_PAYROLL_ENDPOINT}/update-payroll/${payrollId}`,
         updatedData,
-        { withCredentials: true }
+        { withCredentials: true, headers: { 'x-csrf-token': csrf } }
       );
       return response.data;
     } catch (error) {
@@ -55,10 +70,12 @@ export const generatePayrolls = createAsyncThunk(
   'payroll/generatePayrolls',
   async ({ month, year }, thunkAPI) => {
     try {
+      const csrf = getCookie('csrfToken');
+
       const response = await axios.post(
         `${ADMIN_PAYROLL_ENDPOINT}/generate-bulk`,
         { month, year },
-        { withCredentials: true }
+        { withCredentials: true, headers: { 'x-csrf-token': csrf } }
       );
       return response.data;
     } catch (error) {

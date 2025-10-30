@@ -6,15 +6,13 @@ import { fetchEmployees } from "../context/employeeSlice";
 import NotificationSender from "./NotificationSender";
 
 function DashboardAdmin() {
-  const projects = useSelector((state) => state.project.allProjects || []);
-  const [payrolls, setPayrolls] = useState([]);
-  const navigate = useNavigate();
-  const admin = useSelector((state) => state.auth.user);
   const dispatch = useDispatch();
-  
-  const { employees, status, error } = useSelector((state) => state.employees);
+  const { employees = [] } = useSelector((state) => state.employees || {});
+  const { projects = [] } = useSelector((state) => state.projects || {});
+  const { payrolls = [] } = useSelector((state) => state.payrolls || {});
   const employeeCount = employees?.length || 0;
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const navigate = useNavigate();
 
   useEffect(() => {
     dispatch(fetchEmployees());
@@ -193,7 +191,7 @@ function DashboardAdmin() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <tbody>
-                {payrolls.slice(0, 5).map((payroll) => (
+                {(Array.isArray(payrolls) ? payrolls.slice(0, 5) : []).map((payroll) => (
                   <tr key={payroll._id} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="py-2 md:py-3 px-2">
                       <div className="font-medium text-sm md:text-base">{payroll.employeeName}</div>

@@ -1,7 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import { Link, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchPayrolls, generatePayrolls } from '../../context/payrollSlice'; // adjust path as needed
+import axios from '../../utils/axios';
 
 const AdminPayroll = () => {
     const dispatch = useDispatch();
@@ -13,6 +16,9 @@ const AdminPayroll = () => {
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [selectedEmployee, setSelectedEmployee] = useState(null);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [disburseLoading, setDisburseLoading] = useState(false);
+    const [disburseResult, setDisburseResult] = useState(null);
+    const resultsRef = useRef(null);
     const navigate = useNavigate();
 
     const months = useMemo(() => [
@@ -44,6 +50,102 @@ const AdminPayroll = () => {
             year: selectedYear
         }));
     }, [selectedMonth, selectedYear, dispatch, navigate, months, currentUser]);
+
+    const handleDisburse = async () => {
+        if (!currentUser || currentUser.role !== 'admin') return;
+        try {
+            setDisburseLoading(true);
+            setDisburseResult(null);
+            const payload = {
+                month: months[selectedMonth].label,
+                year: selectedYear
+            };
+            const base = typeof axios.defaults.baseURL === 'string' ? axios.defaults.baseURL : '';
+            const path = base.includes('/api') ? '/v1/admin/payroll/disburse' : '/api/v1/admin/payroll/disburse';
+            const res = await axios.post(path, payload);
+            setDisburseResult(res.data);
+            // Refresh list to reflect Paid statuses
+            dispatch(fetchPayrolls(payload));
+        } catch (e) {
+            setDisburseResult({ success: false, message: e?.response?.data?.message || e.message });
+        } finally {
+            setDisburseLoading(false);
+        }
+    };
+
+    const handleExportCSV = () => {
+        if (!disburseResult?.results) return;
+        const rows = disburseResult.results;
+        const header = ['Employee','Email','Amount','Status','Reference/Error'];
+        const lines = [header.join(',')];
+        rows.forEach(r => {
+            const cols = [
+                (r.employeeName || r.employee || '').toString().replaceAll(',', ' '),
+                (r.employeeEmail || '').toString().replaceAll(',', ' '),
+                (r.amount ?? 0).toString(),
+                (r.status || '').toString(),
+                (r.reference || r.error || '').toString().replaceAll(',', ' ')
+            ];
+            lines.push(cols.join(','));
+        });
+        const csv = '\uFEFF' + lines.join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const m = months[selectedMonth].label;
+        a.href = url;
+        a.download = `disbursement_${m}_${selectedYear}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const handleExportPDF = async () => {
+        if (!resultsRef.current) return;
+        const m = months[selectedMonth].label;
+        const summary = disburseResult?.success
+            ? `Total: ${disburseResult.total}  •  Paid: ${disburseResult.paid}  •  Failed: ${disburseResult.failed}`
+            : (disburseResult?.message || '');
+
+        // Build a clean wrapper for rendering
+        const wrapper = document.createElement('div');
+        wrapper.style.padding = '16px';
+        wrapper.style.background = '#ffffff';
+        const titleEl = document.createElement('div');
+        titleEl.style.fontSize = '18px';
+        titleEl.style.fontWeight = '600';
+        titleEl.style.marginBottom = '8px';
+        titleEl.textContent = `Disbursement Results - ${m} ${selectedYear}`;
+        const metaEl = document.createElement('div');
+        metaEl.style.fontSize = '12px';
+        metaEl.style.marginBottom = '12px';
+        metaEl.textContent = summary;
+        const tableClone = resultsRef.current.cloneNode(true);
+        wrapper.appendChild(titleEl);
+        wrapper.appendChild(metaEl);
+        wrapper.appendChild(tableClone);
+
+        const canvas = await html2canvas(wrapper, { scale: 2 });
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF('p', 'pt', 'a4');
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const imgWidth = pageWidth - 40; // margins
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+        pdf.addImage(imgData, 'PNG', 20, 20, imgWidth, imgHeight);
+
+        // If content exceeds one page, add extra pages with appropriate offsets
+        let remaining = imgHeight - (pageHeight - 40);
+        let offsetY = 20 - (imgHeight - (pageHeight - 40));
+        while (remaining > 0) {
+            pdf.addPage();
+            pdf.addImage(imgData, 'PNG', 20, offsetY, imgWidth, imgHeight);
+            remaining -= (pageHeight - 40);
+            offsetY -= (pageHeight - 40);
+        }
+
+        pdf.save(`disbursement_${m}_${selectedYear}.pdf`);
+    };
 
     const handleViewDetails = (employee) => {
         setSelectedEmployee(employee);
@@ -83,6 +185,14 @@ const AdminPayroll = () => {
                     >
                         Auto Generate
                     </button>
+                    <button
+                        className="px-3 py-2 bg-blue-600 text-white rounded disabled:opacity-50"
+                        onClick={handleDisburse}
+                        disabled={disburseLoading || !currentUser || currentUser.role !== 'admin'}
+                        title="Disburse in-hand amounts to employees' bank accounts"
+                    >
+                        {disburseLoading ? 'Disbursing…' : 'Disburse Salaries'}
+                    </button>
                     <Link to="/add-payroll">
                         <button
                             onClick={handleCreatePayroll}
@@ -93,6 +203,59 @@ const AdminPayroll = () => {
                     </Link>
                 </div>
             </div>
+
+            {disburseResult && (
+                <div className={`p-3 rounded mb-4 ${disburseResult.success ? 'bg-green-50' : 'bg-red-50'}`}>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <div className="font-medium">{disburseResult.success ? 'Disbursement complete' : 'Disbursement failed'}</div>
+                            <div className="text-sm">
+                                {disburseResult.success ? (
+                                    <>Total: {disburseResult.total} • Paid: {disburseResult.paid} • Failed: {disburseResult.failed}</>
+                                ) : (
+                                    <>{disburseResult.message}</>
+                                )}
+                            </div>
+                        </div>
+                        {disburseResult.success && (
+                            <div className="flex items-center gap-2">
+                                <button className="px-3 py-1.5 bg-white border rounded" onClick={handleExportCSV}>Export CSV</button>
+                                <button className="px-3 py-1.5 bg-white border rounded" onClick={handleExportPDF}>Export PDF</button>
+                            </div>
+                        )}
+                    </div>
+                    {Array.isArray(disburseResult.results) && disburseResult.results.length > 0 && (
+                        <div ref={resultsRef} className="mt-3 overflow-x-auto">
+                            <table className="min-w-full text-sm">
+                                <thead>
+                                    <tr className="text-left">
+                                        <th className="px-2 py-1">Employee</th>
+                                        <th className="px-2 py-1">Email</th>
+                                        <th className="px-2 py-1">Amount</th>
+                                        <th className="px-2 py-1">Status</th>
+                                        <th className="px-2 py-1">Reference / Error</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {disburseResult.results.map((r, idx) => (
+                                        <tr key={idx} className="border-t">
+                                            <td className="px-2 py-1">{r.employeeName || r.employee}</td>
+                                            <td className="px-2 py-1">{r.employeeEmail || '-'}</td>
+                                            <td className="px-2 py-1">${`$${(r.amount || 0).toLocaleString()}`}</td>
+                                            <td className="px-2 py-1">
+                                                <span className={`px-2 py-0.5 rounded text-white ${r.status === 'Success' ? 'bg-green-600' : 'bg-red-600'}`}>
+                                                    {r.status}
+                                                </span>
+                                            </td>
+                                            <td className="px-2 py-1 break-all">{r.reference || r.error || '-'}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+            )}
 
             <div className="bg-white p-5 rounded-lg shadow">
                 <div className="flex flex-col md:flex-row gap-5 mb-5">

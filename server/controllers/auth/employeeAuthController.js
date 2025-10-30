@@ -177,10 +177,19 @@ export const loginEmployee = async (req, res) => {
 
 export const logoutEmployee = (req, res) => {
     try {
-        res.clearCookie('jwt', {
+        const crossSite = String(process.env.CROSS_SITE_COOKIES).toLowerCase() === 'true';
+        const cookieOptions = {
             httpOnly: true,
-            sameSite: 'strict',
-            secure: process.env.NODE_ENV === 'production',
+            sameSite: crossSite ? 'none' : 'lax',
+            secure: crossSite || process.env.NODE_ENV === 'production',
+            path: '/',
+        };
+
+        res.clearCookie('jwt', cookieOptions);
+        res.clearCookie('csrfToken', {
+            httpOnly: false,
+            sameSite: cookieOptions.sameSite,
+            secure: cookieOptions.secure,
             path: '/',
         });
 

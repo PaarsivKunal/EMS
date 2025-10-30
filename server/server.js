@@ -34,6 +34,7 @@ import attendanceRuleRouter from "./routes/Admin/AttendanceRuleRoutes.js";
 import notificationSettingsRouter from "./routes/Admin/NotificationSettingsRoutes.js";
 import path from 'path';
 import { fileURLToPath } from 'url';
+import csrfProtection from './middlewares/csrf.js';
 
 
 
@@ -62,6 +63,9 @@ connectDB();
 if (process.env.NODE_ENV !== 'test') {
     app.use(requestLogger);
 }
+
+// Trust proxy for correct protocol/secure cookies behind proxies
+app.set('trust proxy', 1);
 
 // Basic middleware first
 app.use(express.json({ limit: '10mb' }));
@@ -96,6 +100,9 @@ app.use(cors({
 
 // Rate limiting
 app.use(apiLimiter);
+
+// CSRF protection (double-submit) for state-changing methods
+app.use(csrfProtection);
 
 // HTTPS enforcement in production
 if (process.env.NODE_ENV === 'production') {

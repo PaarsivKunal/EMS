@@ -1,6 +1,6 @@
 
 import express from "express";
-import { getAllEmployeesPayroll, getAllPayrolls, getEmployeePayroll, updatePayroll, createPayroll, getEmployeePayrollForAdmin, getCurrentMonthPayrollForAdmin, getPayrollByEmployeeMonthYear, togglePayrollVisibility, generatePayrollsForMonthYear } from "../../controllers/admin/payrollController.js";
+import { getAllEmployeesPayroll, getAllPayrolls, getEmployeePayroll, updatePayroll, createPayroll, getEmployeePayrollForAdmin, getCurrentMonthPayrollForAdmin, getPayrollByEmployeeMonthYear, togglePayrollVisibility, generatePayrollsForMonthYear, disbursePayrolls } from "../../controllers/admin/payrollController.js";
 import isAuthenticated from "../../middlewares/isAuthenticated.js";
 import isAdminAuthenticated from "../../middlewares/isAdminAuthenticated.js";
 
@@ -14,6 +14,9 @@ router.route("/create-payroll").post(isAdminAuthenticated, createPayroll)
 router.route("/update-payroll/:id").put(isAdminAuthenticated,updatePayroll)
 router.route("/toggle-visibility/:id").patch(isAdminAuthenticated, togglePayrollVisibility)
 router.route("/generate-bulk").post(isAdminAuthenticated, generatePayrollsForMonthYear)
+
+// Disburse salaries to employees' bank accounts (mock provider)
+router.route("/disburse").post(isAdminAuthenticated, disbursePayrolls)
 
 // Admin employee payroll management
 router.route("/admin-employee-payroll/:employeeId").get(isAdminAuthenticated, getEmployeePayrollForAdmin)
