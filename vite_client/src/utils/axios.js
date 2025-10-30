@@ -8,6 +8,18 @@ const instance = axios.create({
 // Request interceptor to add debugging (only in development)
 instance.interceptors.request.use(
   (config) => {
+    // Normalize URL to avoid double /api when baseURL ends with /api
+    try {
+      const base = instance.defaults.baseURL || '';
+      if (typeof config.url === 'string') {
+        const endsWithApi = /\/api\/?$/.test(base);
+        if (endsWithApi && config.url.startsWith('/api/')) {
+          // Strip the leading /api from the path so base/api + /v1/...
+          config.url = config.url.replace(/^\/api\//, '/');
+        }
+      }
+    } catch (_) {}
+
     // Add CSRF header for state-changing requests if token cookie exists
     try {
       const method = (config.method || 'get').toLowerCase();

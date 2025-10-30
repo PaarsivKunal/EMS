@@ -106,25 +106,32 @@ const AdminPayroll = () => {
             ? `Total: ${disburseResult.total}  •  Paid: ${disburseResult.paid}  •  Failed: ${disburseResult.failed}`
             : (disburseResult?.message || '');
 
-        // Build a clean wrapper for rendering
+        // Build a wrapper and attach to DOM so computed styles (Tailwind) apply
         const wrapper = document.createElement('div');
+        wrapper.style.position = 'fixed';
+        wrapper.style.left = '-10000px';
+        wrapper.style.top = '0';
         wrapper.style.padding = '16px';
         wrapper.style.background = '#ffffff';
+
         const titleEl = document.createElement('div');
         titleEl.style.fontSize = '18px';
         titleEl.style.fontWeight = '600';
         titleEl.style.marginBottom = '8px';
         titleEl.textContent = `Disbursement Results - ${m} ${selectedYear}`;
+
         const metaEl = document.createElement('div');
         metaEl.style.fontSize = '12px';
         metaEl.style.marginBottom = '12px';
         metaEl.textContent = summary;
+
         const tableClone = resultsRef.current.cloneNode(true);
         wrapper.appendChild(titleEl);
         wrapper.appendChild(metaEl);
         wrapper.appendChild(tableClone);
+        document.body.appendChild(wrapper);
 
-        const canvas = await html2canvas(wrapper, { scale: 2 });
+        const canvas = await html2canvas(wrapper, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
         const imgData = canvas.toDataURL('image/png');
         const pdf = new jsPDF('p', 'pt', 'a4');
         const pageWidth = pdf.internal.pageSize.getWidth();
@@ -145,6 +152,9 @@ const AdminPayroll = () => {
         }
 
         pdf.save(`disbursement_${m}_${selectedYear}.pdf`);
+
+        // Cleanup
+        document.body.removeChild(wrapper);
     };
 
     const handleViewDetails = (employee) => {

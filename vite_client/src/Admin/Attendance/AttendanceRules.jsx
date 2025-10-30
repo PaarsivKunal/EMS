@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import axios from '../../utils/axios';
 import { toast } from 'react-toastify';
 import { FaMapMarkerAlt, FaRuler, FaSave, FaTimes } from 'react-icons/fa';
 import GoogleMapsComponent from '../../utils/GoogleMaps';
@@ -29,9 +29,7 @@ const AttendanceRules = () => {
     const fetchAttendanceRule = async () => {
         try {
             setLoading(true);
-            const response = await axios.get('/api/v1/admin/attendance-rules/current', {
-                withCredentials: true
-            });
+            const response = await axios.get('/api/v1/admin/attendance-rules/current');
 
             if (response.data.success && response.data.rule) {
                 console.log('=== Loading Attendance Rule ===');
@@ -137,8 +135,7 @@ const AttendanceRules = () => {
             setSaving(true);
             const response = await axios.post(
                 '/api/v1/admin/attendance-rules/create-or-update',
-                dataToSend,
-                { withCredentials: true }
+                dataToSend
             );
 
             if (response.data.success) {
