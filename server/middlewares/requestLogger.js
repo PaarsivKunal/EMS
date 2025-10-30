@@ -18,7 +18,7 @@ export const requestLogger = (req, res, next) => {
         referer: req.get('referer'),
         contentType: req.get('content-type'),
         contentLength: req.get('content-length'),
-        authenticated: !!req.cookies.jwt || !!req.headers.authorization,
+        authenticated: !!(req.cookies?.jwt) || !!req.headers.authorization,
         role: req.user?.role || req.employee?.role || 'anonymous'
     };
 
