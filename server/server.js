@@ -54,10 +54,17 @@ if (missingVars.length > 0) {
     process.exit(1);
 }
 
-const PORT = process.env.PORT || 5000
+// Additional production environment variable validation
+if (process.env.NODE_ENV === 'production') {
+  const prodRequired = ['FRONTEND_URL', 'MONGO_URI', 'JWT_SECRET'];
+  const missingProd = prodRequired.filter(varName => !process.env[varName]);
+  if (missingProd.length > 0) {
+    console.error('❌ Missing required production environment variables:', missingProd.join(', '));
+    process.exit(1);
+  }
+}
 
-//mongoose connection
-connectDB();
+const PORT = process.env.PORT || 5000
 
 // Request logging middleware (before other middleware)
 if (process.env.NODE_ENV !== 'test') {
@@ -72,8 +79,12 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
-// Security middleware
-app.use(helmet());
+// Security middleware - configure for React app
+app.use(helmet({
+  // Allow inline scripts/styles for React (can be tightened later)
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+}));
 app.use(mongoSanitize()); // Prevent NoSQL injection attacks
 app.use(xss()); // Prevent XSS attacks
 
@@ -180,7 +191,17 @@ app.use(express.static(path.join(__dirname, 'public'), {
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Basic API route
+// Root route - serve frontend
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'), (err) => {
+    if (err) {
+      console.error('Failed to serve index.html:', err);
+      res.status(500).json({ error: 'Frontend not available' });
+    }
+  });
+});
+
+// API info route
 app.get('/api', (req, res) => {
     res.json({
         success: true,
@@ -192,16 +213,28 @@ app.get('/api', (req, res) => {
 // Catch-all handler: send back React's index.html file for any non-API routes
 // MUST be last, after all other routes and static file serving
 app.get('*', (req, res, next) => {
-  // Only handle GET requests that are not API routes and not static assets
-  if (req.method === 'GET' && 
-      !req.path.startsWith('/api') && 
-      !req.path.startsWith('/assets') &&
-      !req.path.startsWith('/uploads') &&
-      !req.path.includes('.')) { // Don't catch files with extensions
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-  } else {
-    next();
+  // Skip if not GET request
+  if (req.method !== 'GET') {
+    return next();
   }
+  
+  // Skip API routes, assets, uploads, and files with extensions
+  const requestPath = req.path.split('?')[0]; // Remove query parameters
+  if (requestPath.startsWith('/api') || 
+      requestPath.startsWith('/assets') ||
+      requestPath.startsWith('/uploads') ||
+      requestPath.match(/\.\w+$/)) { // Files with extensions
+    return next();
+  }
+  
+  // Serve index.html for SPA routing
+  const indexPath = path.join(__dirname, 'public', 'index.html');
+  res.sendFile(indexPath, (err) => {
+    if (err) {
+      console.error('Failed to send index.html:', err);
+      return next();
+    }
+  });
 });
 
 // Handle 404 routes (must be after catch-all)
@@ -210,7 +243,25 @@ app.use(notFoundHandler);
 //error handler
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
-});
+// Connect to database and start server
+const startServer = async () => {
+  try {
+    // Connect to database first
+    await connectDB();
+    
+    // Start server after database connection
+    app.listen(PORT, () => {
+      console.log(`✅ Server is running on port ${PORT}`);
+      console.log(`✅ MongoDB connected successfully`);
+      if (process.env.NODE_ENV === 'production') {
+        console.log(`✅ Production mode - Frontend: ${process.env.FRONTEND_URL || 'Not set!'}`);
+      }
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+startServer();
 
