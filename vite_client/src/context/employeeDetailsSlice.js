@@ -1,8 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import axios from 'axios';
+import axiosInstance from '../api/axiosInstance';
 import { BOTH_PROFILE_ENDPOINT } from '../utils/constant';
-// Base URL - use environment variable or default to relative path
-const API_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
 // Async thunk for fetching employee details
 export const fetchEmployeeDetails = createAsyncThunk(
@@ -236,16 +234,18 @@ export const updateFinancialDetails = createAsyncThunk(
   }
 );
 
-//Asyn thunk for fetching employee's own info
+//Async thunk for fetching employee's own info
 export const fetchEmployeeOwnInfo = createAsyncThunk(
   'employeeDetails/fetchEmployeeOwnInfo',
   async (_, { rejectWithValue }) => {
     try {
-      console.log('fetchEmployeeOwnInfo: Making request to', `${BOTH_PROFILE_ENDPOINT}/get-my-details`);
-      const response = await axios.get(
-        `${BOTH_PROFILE_ENDPOINT}/get-my-details`,
-        { withCredentials: true }
-      );
+      // Extract path from full URL constant and use axiosInstance
+      const path = BOTH_PROFILE_ENDPOINT.includes('/api/v1/') 
+        ? BOTH_PROFILE_ENDPOINT.split('/api/v1')[1] || '/both/profile-details/get-my-details'
+        : '/v1/both/profile-details/get-my-details';
+      
+      console.log('fetchEmployeeOwnInfo: Making request to', path);
+      const response = await axiosInstance.get(path);
       console.log('fetchEmployeeOwnInfo: Response received', response.data);
       return response.data.employee;
     } catch (error) {
