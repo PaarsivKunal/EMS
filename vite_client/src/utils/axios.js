@@ -1,7 +1,20 @@
 import axios from 'axios';
 
+// Determine base URL: use env var, or default to backend URL in production, or relative path in dev
+const getBaseURL = () => {
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  // In production, use full backend URL (different domain)
+  if (import.meta.env.PROD) {
+    return 'https://ems-v6j5.onrender.com/api';
+  }
+  // In development, use relative path (vite proxy handles it)
+  return '/api';
+};
+
 const instance = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
+  baseURL: getBaseURL(),
   withCredentials: true, // Essential for cookies
 });
 

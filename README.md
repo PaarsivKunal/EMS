@@ -39,8 +39,14 @@ npm run dev
 ```
 
 ## Environment variables
-- Copy `server/env.example` to `server/.env` and fill values.
-- Copy `vite_client/.env` from `.env.example` if present.
+- **Server:** Copy `server/env.example` to `server/.env` and fill values.
+  - **Important:** Set `FRONTEND_URL=https://paarsiv-ems.onrender.com` for production
+  - Set `CROSS_SITE_COOKIES=true` when frontend and backend are on different domains
+- **Client:** 
+  - Development: No `.env` needed (uses vite proxy)
+  - Production: Copy `vite_client/.env.production.example` to `vite_client/.env.production`
+    - Backend URL: `https://ems-v6j5.onrender.com`
+    - Already configured in code, but you can override with env vars
 - Do NOT commit `.env` files (a `.gitignore` is included).
 
 ## Running tests

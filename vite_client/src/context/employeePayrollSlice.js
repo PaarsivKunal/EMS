@@ -1,7 +1,12 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:5000/api/v1/employee/payroll';
+// Use environment variable or default based on environment
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL 
+  ? `${import.meta.env.VITE_API_BASE_URL}/employee/payroll`
+  : (import.meta.env.PROD 
+    ? 'https://ems-v6j5.onrender.com/api/v1/employee/payroll'
+    : 'http://localhost:5000/api/v1/employee/payroll');
 
 // Async thunks
 export const fetchPayrollHistory = createAsyncThunk(

@@ -1,7 +1,10 @@
 
 
 // Base API URL from environment or default
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
+// Production: https://ems-v6j5.onrender.com/api/v1
+// Development: http://localhost:5000/api/v1
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 
+  (import.meta.env.PROD ? 'https://ems-v6j5.onrender.com/api/v1' : 'http://localhost:5000/api/v1');
 
 //==================Admin===================//
 
