@@ -1,5 +1,6 @@
 import multer from 'multer';
 import path from 'path';
+import fs from 'fs';
 
 // Configure allowed file types
 const ALLOWED_FILE_TYPES = {
@@ -62,13 +63,11 @@ const storage = multer.diskStorage({
         const uploadType = req.params.type || 'general';
         const uploadPath = `./uploads/${uploadType}`;
         
-        // Create directory if it doesn't exist
-        import('fs').then(fs => {
-            if (!fs.existsSync(uploadPath)) {
-                fs.mkdirSync(uploadPath, { recursive: true });
-            }
-            cb(null, uploadPath);
-        });
+        // Create directory if it doesn't exist (synchronously to avoid race conditions)
+        if (!fs.existsSync(uploadPath)) {
+            fs.mkdirSync(uploadPath, { recursive: true });
+        }
+        cb(null, uploadPath);
     },
     filename: (req, file, cb) => {
         const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1E9)}`;

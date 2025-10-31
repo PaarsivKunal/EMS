@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 
 export const generateToken = (userId, role = null, res = null) => {
     try {
@@ -29,7 +30,8 @@ export const generateToken = (userId, role = null, res = null) => {
             res.cookie('jwt', token, cookieOptions);
 
             // Issue CSRF token for double-submit cookie strategy
-            const csrfToken = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+            // Use cryptographically secure random bytes instead of Math.random()
+            const csrfToken = crypto.randomBytes(32).toString('hex');
             const csrfCookieOptions = {
                 maxAge: cookieOptions.maxAge,
                 httpOnly: false,
