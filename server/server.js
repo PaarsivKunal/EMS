@@ -34,6 +34,7 @@ import attendanceRuleRouter from "./routes/Admin/AttendanceRuleRoutes.js";
 import notificationSettingsRouter from "./routes/Admin/NotificationSettingsRoutes.js";
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 import csrfProtection from './middlewares/csrf.js';
 
 
@@ -175,18 +176,93 @@ app.use("/api/v1/admin/attendance-rules",attendanceRuleRouter);
 app.use("/api/v1/admin/notification-settings",notificationSettingsRouter);
 
 // Serve static files from the public directory (MUST be before catch-all)
-app.use(express.static(path.join(__dirname, 'public'), {
-  // Don't serve index.html for static file requests
+// This middleware handles ALL files in public folder including /assets/*
+const publicPath = path.join(__dirname, 'public');
+
+// Verify public directory exists
+if (!fs.existsSync(publicPath)) {
+  console.error(`❌ Public directory not found at: ${publicPath}`);
+}
+
+const staticOptions = {
   index: false,
-  // Set proper MIME types
-  setHeaders: (res, path) => {
-    if (path.endsWith('.css')) {
-      res.setHeader('Content-Type', 'text/css');
-    } else if (path.endsWith('.js')) {
-      res.setHeader('Content-Type', 'application/javascript');
+  setHeaders: (res, filePath) => {
+    // Set proper MIME types based on file extension
+    if (filePath.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css; charset=utf-8');
+    } else if (filePath.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    } else if (filePath.endsWith('.json')) {
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    } else if (filePath.endsWith('.png')) {
+      res.setHeader('Content-Type', 'image/png');
+    } else if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) {
+      res.setHeader('Content-Type', 'image/jpeg');
+    } else if (filePath.endsWith('.svg')) {
+      res.setHeader('Content-Type', 'image/svg+xml');
     }
+    // Cache static assets
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
   }
-}));
+};
+
+// Explicitly handle /assets/* routes FIRST to ensure they're served correctly
+// Use sendFile directly to have full control and prevent error handler from intercepting
+app.use('/assets', (req, res, next) => {
+  // Skip if not GET request
+  if (req.method !== 'GET') {
+    return next();
+  }
+  
+  const assetsPath = path.join(publicPath, 'assets');
+  // Remove /assets prefix and get the actual file path
+  let filePath = req.path.replace(/^\/assets/, '');
+  // Ensure path starts with /
+  if (!filePath.startsWith('/')) {
+    filePath = '/' + filePath;
+  }
+  // Remove leading slash for path.join
+  const actualFilePath = path.join(assetsPath, filePath.replace(/^\//, ''));
+  
+  // Normalize path to prevent directory traversal
+  const normalizedPath = path.normalize(actualFilePath);
+  if (!normalizedPath.startsWith(path.resolve(assetsPath))) {
+    return res.status(403).send('Forbidden');
+  }
+  
+  // Check if file exists
+  if (!fs.existsSync(normalizedPath) || fs.statSync(normalizedPath).isDirectory()) {
+    return res.status(404).type('text/plain').send('File not found');
+  }
+  
+  // Set proper MIME type based on extension
+  const ext = path.extname(normalizedPath).toLowerCase();
+  let contentType = 'application/octet-stream';
+  if (ext === '.css') {
+    contentType = 'text/css; charset=utf-8';
+  } else if (ext === '.js') {
+    contentType = 'application/javascript; charset=utf-8';
+  } else if (ext === '.json') {
+    contentType = 'application/json; charset=utf-8';
+  }
+  
+  // Set headers
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  
+  // Send file directly - this prevents error handler from catching it
+  res.sendFile(normalizedPath, (err) => {
+    if (err) {
+      // If error sending file, send 404 instead of letting error handler return JSON
+      if (!res.headersSent) {
+        res.status(404).type('text/plain').send('File not found');
+      }
+    }
+  });
+});
+
+// Serve all other static files from the public directory
+app.use(express.static(publicPath, staticOptions));
 
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -218,17 +294,31 @@ app.get('*', (req, res, next) => {
     return next();
   }
   
-  // Skip API routes, assets, uploads, and files with extensions
-  const requestPath = req.path.split('?')[0]; // Remove query parameters
+  // Extract path without query parameters
+  const requestPath = req.path.split('?')[0];
+  
+  // IMPORTANT: Skip ALL static asset paths - let express.static handle them or return 404
+  // This includes: /assets/*, /uploads/*, files with extensions, etc.
   if (requestPath.startsWith('/api') || 
       requestPath.startsWith('/assets') ||
       requestPath.startsWith('/uploads') ||
-      requestPath.match(/\.\w+$/)) { // Files with extensions
-    return next();
+      requestPath.match(/\.\w+$/)) { // Any file with extension (css, js, png, etc.)
+    // If static middleware didn't serve it, it doesn't exist - return 404
+    return next(); // This will go to notFoundHandler
   }
   
-  // Serve index.html for SPA routing
+  // For all other routes (SPA routes), serve index.html
   const indexPath = path.join(__dirname, 'public', 'index.html');
+  
+  // Check if index.html exists before sending
+  if (!fs.existsSync(indexPath)) {
+    console.error('index.html not found at:', indexPath);
+    return res.status(500).json({ 
+      error: 'Frontend not available',
+      path: indexPath 
+    });
+  }
+  
   res.sendFile(indexPath, (err) => {
     if (err) {
       console.error('Failed to send index.html:', err);
