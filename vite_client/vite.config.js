@@ -2,15 +2,13 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
-// https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(),
-    tailwindcss()
-  ],
+  plugins: [react(), tailwindcss()],
   build: {
-    outDir: 'dist',              // ⬅️ build frontend into dist folder
-    emptyOutDir: true,           // cleans before build
+    outDir: '../server/public', // build frontend into backend/public
+    emptyOutDir: true,          // cleans folder before build
   },
+  base: './',                   // use relative paths
   optimizeDeps: {
     exclude: [
       'html2canvas',
