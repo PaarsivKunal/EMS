@@ -115,10 +115,99 @@ app.use(cors({
   optionsSuccessStatus: 200
 }));
 
-// Rate limiting
+// ========== STATIC FILES FIRST - BEFORE RATE LIMITING AND CSRF ==========
+// This MUST be before rate limiting and CSRF to avoid interference
+const publicPath = path.join(__dirname, 'public');
+
+// Verify public directory exists
+if (!fs.existsSync(publicPath)) {
+  console.error(`❌ Public directory not found at: ${publicPath}`);
+}
+
+const staticOptions = {
+  index: false,
+  setHeaders: (res, filePath) => {
+    // Set proper MIME types based on file extension
+    if (filePath.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css; charset=utf-8');
+    } else if (filePath.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    } else if (filePath.endsWith('.json')) {
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    } else if (filePath.endsWith('.png')) {
+      res.setHeader('Content-Type', 'image/png');
+    } else if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) {
+      res.setHeader('Content-Type', 'image/jpeg');
+    } else if (filePath.endsWith('.svg')) {
+      res.setHeader('Content-Type', 'image/svg+xml');
+    }
+    // Cache static assets
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  }
+};
+
+// Explicitly handle /assets/* routes FIRST - before any other middleware that might interfere
+app.use('/assets', (req, res, next) => {
+  // Skip if not GET request
+  if (req.method !== 'GET') {
+    return next();
+  }
+  
+  const assetsPath = path.join(publicPath, 'assets');
+  // Remove /assets prefix and get the actual file path
+  let filePath = req.path.replace(/^\/assets/, '');
+  // Ensure path starts with /
+  if (!filePath.startsWith('/')) {
+    filePath = '/' + filePath;
+  }
+  // Remove leading slash for path.join
+  const actualFilePath = path.join(assetsPath, filePath.replace(/^\//, ''));
+  
+  // Normalize path to prevent directory traversal
+  const normalizedPath = path.normalize(actualFilePath);
+  if (!normalizedPath.startsWith(path.resolve(assetsPath))) {
+    return res.status(403).type('text/plain').send('Forbidden');
+  }
+  
+  // Check if file exists
+  if (!fs.existsSync(normalizedPath) || fs.statSync(normalizedPath).isDirectory()) {
+    return res.status(404).type('text/plain').send('File not found');
+  }
+  
+  // Set proper MIME type based on extension
+  const ext = path.extname(normalizedPath).toLowerCase();
+  let contentType = 'application/octet-stream';
+  if (ext === '.css') {
+    contentType = 'text/css; charset=utf-8';
+  } else if (ext === '.js') {
+    contentType = 'application/javascript; charset=utf-8';
+  } else if (ext === '.json') {
+    contentType = 'application/json; charset=utf-8';
+  }
+  
+  // Set headers BEFORE sending file
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  
+  // Send file directly - this prevents error handler from catching it
+  res.sendFile(normalizedPath, (err) => {
+    if (err && !res.headersSent) {
+      // If error sending file, send 404 as plain text
+      res.status(404).type('text/plain').send('File not found');
+    }
+  });
+});
+
+// Serve all other static files from the public directory
+app.use(express.static(publicPath, staticOptions));
+
+// Serve uploaded files
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Rate limiting (AFTER static files to avoid interfering with asset serving)
 app.use(apiLimiter);
 
-// CSRF protection (double-submit) for state-changing methods
+// CSRF protection (double-submit) for state-changing methods (AFTER static files)
 app.use(csrfProtection);
 
 // HTTPS enforcement in production
@@ -174,98 +263,6 @@ app.use("/api/v1/admin/id-cards",idCardRouter);
 app.use("/api/v1/admin/salary-structure",salaryStructureRouter);
 app.use("/api/v1/admin/attendance-rules",attendanceRuleRouter);
 app.use("/api/v1/admin/notification-settings",notificationSettingsRouter);
-
-// Serve static files from the public directory (MUST be before catch-all)
-// This middleware handles ALL files in public folder including /assets/*
-const publicPath = path.join(__dirname, 'public');
-
-// Verify public directory exists
-if (!fs.existsSync(publicPath)) {
-  console.error(`❌ Public directory not found at: ${publicPath}`);
-}
-
-const staticOptions = {
-  index: false,
-  setHeaders: (res, filePath) => {
-    // Set proper MIME types based on file extension
-    if (filePath.endsWith('.css')) {
-      res.setHeader('Content-Type', 'text/css; charset=utf-8');
-    } else if (filePath.endsWith('.js')) {
-      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-    } else if (filePath.endsWith('.json')) {
-      res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    } else if (filePath.endsWith('.png')) {
-      res.setHeader('Content-Type', 'image/png');
-    } else if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) {
-      res.setHeader('Content-Type', 'image/jpeg');
-    } else if (filePath.endsWith('.svg')) {
-      res.setHeader('Content-Type', 'image/svg+xml');
-    }
-    // Cache static assets
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-  }
-};
-
-// Explicitly handle /assets/* routes FIRST to ensure they're served correctly
-// Use sendFile directly to have full control and prevent error handler from intercepting
-app.use('/assets', (req, res, next) => {
-  // Skip if not GET request
-  if (req.method !== 'GET') {
-    return next();
-  }
-  
-  const assetsPath = path.join(publicPath, 'assets');
-  // Remove /assets prefix and get the actual file path
-  let filePath = req.path.replace(/^\/assets/, '');
-  // Ensure path starts with /
-  if (!filePath.startsWith('/')) {
-    filePath = '/' + filePath;
-  }
-  // Remove leading slash for path.join
-  const actualFilePath = path.join(assetsPath, filePath.replace(/^\//, ''));
-  
-  // Normalize path to prevent directory traversal
-  const normalizedPath = path.normalize(actualFilePath);
-  if (!normalizedPath.startsWith(path.resolve(assetsPath))) {
-    return res.status(403).send('Forbidden');
-  }
-  
-  // Check if file exists
-  if (!fs.existsSync(normalizedPath) || fs.statSync(normalizedPath).isDirectory()) {
-    return res.status(404).type('text/plain').send('File not found');
-  }
-  
-  // Set proper MIME type based on extension
-  const ext = path.extname(normalizedPath).toLowerCase();
-  let contentType = 'application/octet-stream';
-  if (ext === '.css') {
-    contentType = 'text/css; charset=utf-8';
-  } else if (ext === '.js') {
-    contentType = 'application/javascript; charset=utf-8';
-  } else if (ext === '.json') {
-    contentType = 'application/json; charset=utf-8';
-  }
-  
-  // Set headers
-  res.setHeader('Content-Type', contentType);
-  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-  
-  // Send file directly - this prevents error handler from catching it
-  res.sendFile(normalizedPath, (err) => {
-    if (err) {
-      // If error sending file, send 404 instead of letting error handler return JSON
-      if (!res.headersSent) {
-        res.status(404).type('text/plain').send('File not found');
-      }
-    }
-  });
-});
-
-// Serve all other static files from the public directory
-app.use(express.static(publicPath, staticOptions));
-
-// Serve uploaded files
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Root route - serve frontend
 app.get('/', (req, res) => {
