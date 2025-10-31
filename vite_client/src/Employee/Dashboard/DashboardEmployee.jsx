@@ -20,7 +20,7 @@ import PasswordResetPopup from '../PasswordResetPopup';
 import ProfilePicture from '../../Shared/ProfilePicture';
 import { fetchEmployeeOwnInfo } from '../../context/employeeDetailsSlice';
 import { format } from 'date-fns';
-import axios from 'axios';
+import axiosInstance from '../../api/axiosInstance';
 
 import { 
     BOTH_ATTENDANCE_ENDPOINT, 
@@ -85,27 +85,22 @@ function DashboardEmployee() {
                 const currentYear = new Date().getFullYear();
 
                 // Fetch today's attendance
-                const todayLogs = await axios.get(`${BOTH_ATTENDANCE_ENDPOINT}/get-logs`, {
-                    params: { startDate: today, endDate: today },
-                    withCredentials: true
+                const todayLogs = await axiosInstance.get(`${BOTH_ATTENDANCE_ENDPOINT}/get-logs`, {
+                    params: { startDate: today, endDate: today }
                 });
 
                 // Fetch this month's attendance for hours calculation
                 const firstDayOfMonth = format(new Date(currentYear, currentMonth - 1, 1), 'yyyy-MM-dd');
                 const lastDayOfMonth = format(new Date(currentYear, currentMonth, 0), 'yyyy-MM-dd');
                 
-                const monthLogs = await axios.get(`${BOTH_ATTENDANCE_ENDPOINT}/get-logs`, {
-                    params: { startDate: firstDayOfMonth, endDate: lastDayOfMonth },
-                    withCredentials: true
+                const monthLogs = await axiosInstance.get(`${BOTH_ATTENDANCE_ENDPOINT}/get-logs`, {
+                    params: { startDate: firstDayOfMonth, endDate: lastDayOfMonth }
                 });
 
                 // Fetch current month payroll
                 let payrollAmount = 0;
                 try {
-                    const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
-                    const payrollRes = await axios.get(`${BASE_URL}/employee/payroll/current`, {
-                        withCredentials: true
-                    });
+                    const payrollRes = await axiosInstance.get('/api/v1/employee/payroll/current');
                     if (payrollRes.data?.inHandSalary) {
                         payrollAmount = payrollRes.data.inHandSalary;
                     }
@@ -116,9 +111,7 @@ function DashboardEmployee() {
                 // Fetch leave balance from Leave data
                 let leaveBalance = 0;
                 try {
-                    const leaveRes = await axios.get(`${EMPLOYEE_LEAVE_ENDPOINT}/get-my-leaves`, {
-                        withCredentials: true
-                    });
+                    const leaveRes = await axiosInstance.get(`${EMPLOYEE_LEAVE_ENDPOINT}/get-my-leaves`);
                     if (leaveRes.data?.statistics?.remainingLeaves !== undefined) {
                         leaveBalance = leaveRes.data.statistics.remainingLeaves;
                     }
@@ -129,9 +122,7 @@ function DashboardEmployee() {
                 // Fetch tasks count
                 let tasksCount = 0;
                 try {
-                    const tasksRes = await axios.get(`${BOTH_TASK_ENDPOINT}/all-tasks`, {
-                        withCredentials: true
-                    });
+                    const tasksRes = await axiosInstance.get(`${BOTH_TASK_ENDPOINT}/all-tasks`);
                     tasksCount = tasksRes.data?.tasks?.length || 0;
                 } catch (err) {
                     console.log('No tasks data');
@@ -140,10 +131,7 @@ function DashboardEmployee() {
                 // Fetch upcoming birthdays
                 let birthdays = [];
                 try {
-                    const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
-                    const birthdaysRes = await axios.get(`${BASE_URL}/both/profile-details/upcoming-birthdays`, {
-                        withCredentials: true
-                    });
+                    const birthdaysRes = await axiosInstance.get('/api/v1/both/profile-details/upcoming-birthdays');
                     if (birthdaysRes.data?.birthdays) {
                         birthdays = birthdaysRes.data.birthdays;
                     }

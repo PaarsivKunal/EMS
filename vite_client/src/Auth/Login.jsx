@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { setLoading, setUser } from '../context/Auth/authSlice';
 import { toast } from 'react-toastify';
-import axios from '../utils/axios';
+import axiosInstance from '../api/axiosInstance';
 import PasswordResetPopup from '../Employee/PasswordResetPopup';
 
 function Login() {
@@ -42,10 +42,10 @@ function Login() {
         let userRole = '';
 
         if (emailDomain === 'gmail.com') {
-            apiEndpoint = '/v1/admin/auth/login';
+            apiEndpoint = '/api/v1/admin/auth/login';
             userRole = 'admin';
         } else if (emailDomain === 'paarsiv.com') {
-            apiEndpoint = '/v1/employee/auth/login';
+            apiEndpoint = '/api/v1/employee/auth/login';
             userRole = 'employee';
         } else {
             toast.error('Only @gmail.com and @paarsiv.com domains are allowed.');
@@ -55,9 +55,7 @@ function Login() {
         try {
             dispatch(setLoading(true));
 
-            const response = await axios.post(apiEndpoint, form, {
-                withCredentials: true
-            });
+            const response = await axiosInstance.post(apiEndpoint, form);
 
             const data = response.data;
             console.log('Login response:', { status: response.status, data, userRole });
@@ -166,17 +164,16 @@ function Login() {
                 onSuccess={async (newPassword) => {
                     // Attempt to logout the existing session; ignore failures
                     try {
-                        await axios.get('/v1/employee/auth/logout', { withCredentials: true });
+                        await axiosInstance.get('/api/v1/employee/auth/logout');
                     } catch {
                         // Ignore logout errors
                     }
 
                     // Attempt to login with the new password; if it fails, inform and close popup
                     try {
-                        await axios.post(
-                            '/v1/employee/auth/login',
-                            { email: form.email, password: newPassword },
-                            { withCredentials: true }
+                        await axiosInstance.post(
+                            '/api/v1/employee/auth/login',
+                            { email: form.email, password: newPassword }
                         );
                         toast.success('Password updated and logged in.');
                         window.location.href = '/dashboard-employee';
