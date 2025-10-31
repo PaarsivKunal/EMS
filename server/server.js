@@ -163,14 +163,25 @@ app.use("/api/v1/admin/salary-structure",salaryStructureRouter);
 app.use("/api/v1/admin/attendance-rules",attendanceRuleRouter);
 app.use("/api/v1/admin/notification-settings",notificationSettingsRouter);
 
-// Serve static files from the public directory
-app.use(express.static(path.join(__dirname, 'public')));
+// Serve static files from the public directory (MUST be before catch-all)
+app.use(express.static(path.join(__dirname, 'public'), {
+  // Don't serve index.html for static file requests
+  index: false,
+  // Set proper MIME types
+  setHeaders: (res, path) => {
+    if (path.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css');
+    } else if (path.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript');
+    }
+  }
+}));
 
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-//basic routes
-app.get('/', (req, res) => {
+// Basic API route
+app.get('/api', (req, res) => {
     res.json({
         success: true,
         message: 'API is running...',
@@ -179,8 +190,14 @@ app.get('/', (req, res) => {
 });
 
 // Catch-all handler: send back React's index.html file for any non-API routes
-app.use((req, res, next) => {
-  if (req.method === 'GET' && !req.path.startsWith('/api')) {
+// MUST be last, after all other routes and static file serving
+app.get('*', (req, res, next) => {
+  // Only handle GET requests that are not API routes and not static assets
+  if (req.method === 'GET' && 
+      !req.path.startsWith('/api') && 
+      !req.path.startsWith('/assets') &&
+      !req.path.startsWith('/uploads') &&
+      !req.path.includes('.')) { // Don't catch files with extensions
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
   } else {
     next();

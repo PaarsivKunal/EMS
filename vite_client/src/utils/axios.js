@@ -10,8 +10,20 @@ const getBaseURL = () => {
     return 'https://ems-v6j5.onrender.com/api';
   }
   // In development, use relative path (vite proxy handles it)
+  // This will be proxied to http://localhost:5000 by vite.config.js
   return '/api';
 };
+
+// Debug logging in development
+if (import.meta.env.DEV) {
+  console.log('🔧 API Base URL:', getBaseURL());
+  console.log('🔧 Environment:', {
+    MODE: import.meta.env.MODE,
+    DEV: import.meta.env.DEV,
+    PROD: import.meta.env.PROD,
+    VITE_API_URL: import.meta.env.VITE_API_URL
+  });
+}
 
 const instance = axios.create({
   baseURL: getBaseURL(),
