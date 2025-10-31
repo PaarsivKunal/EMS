@@ -40,18 +40,13 @@ resetPasswordExpire: Date,
 
 },{ timestamps: true });
 
-// Hash password and assign role before saving
+// Hash password before saving
 userSchema.pre('save', async function(next) {
-    // Only assign role when creating new user (not on updates)
-    if (this.isNew && !this.role) {
-        // Assign role based on email domain
-        if (this.email.endsWith('@gmail.com') || this.email.endsWith('@paarsiv.com')) {
-            this.role = 'admin';
-        } else {
-            this.role = 'employee';
-        }
-    }
-
+    // SECURITY FIX: Removed automatic role assignment by email domain
+    // Roles should now be explicitly set during user creation
+    // Default role is 'admin' as per schema definition (line 32)
+    // If no role is provided, schema default will apply
+    
     // Hash password only when modified
     if (this.isModified('password')) {
         try {

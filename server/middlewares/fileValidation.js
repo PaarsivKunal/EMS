@@ -1,6 +1,7 @@
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 
 // Configure allowed file types
 const ALLOWED_FILE_TYPES = {
@@ -70,10 +71,12 @@ const storage = multer.diskStorage({
         cb(null, uploadPath);
     },
     filename: (req, file, cb) => {
-        const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1E9)}`;
-        const ext = path.extname(file.originalname);
-        const name = path.basename(file.originalname, ext);
-        cb(null, `${name}-${uniqueSuffix}${ext}`);
+        // Use cryptographically secure random bytes instead of Math.random()
+        // Remove original filename to prevent path traversal and injection attacks
+        const uniqueSuffix = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}`;
+        const ext = path.extname(file.originalname).toLowerCase();
+        // Generate secure random filename - only preserve safe extension
+        cb(null, `${uniqueSuffix}${ext}`);
     }
 });
 

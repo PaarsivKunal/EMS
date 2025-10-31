@@ -58,7 +58,7 @@ describe('Admin Auth Routes Integration Tests', () => {
             expect(response.body.message).toContain('already registered');
         });
 
-        it('should reject non-gmail email for admin', async () => {
+        it('should allow registration with any email domain (role defaults to admin)', async () => {
             const userData = {
                 name: 'Test Admin',
                 email: 'admin@paarsiv.com',
@@ -68,9 +68,11 @@ describe('Admin Auth Routes Integration Tests', () => {
             const response = await request(app)
                 .post('/api/v1/admin/auth/register')
                 .send(userData)
-                .expect(400);
+                .expect(201);
 
-            expect(response.body.message).toContain('Gmail');
+            expect(response.body.message).toBe('Registration successful');
+            expect(response.body.email).toBe(userData.email);
+            expect(response.body.role).toBe('admin'); // Default role
         });
 
         it('should validate required fields', async () => {

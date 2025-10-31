@@ -100,7 +100,8 @@ function DashboardEmployee() {
                 // Fetch current month payroll
                 let payrollAmount = 0;
                 try {
-                    const payrollRes = await axiosInstance.get('/api/v1/employee/payroll/current');
+                    // Use correct path (baseURL already includes /api)
+                    const payrollRes = await axiosInstance.get('/v1/employee/payroll/current');
                     if (payrollRes.data?.inHandSalary) {
                         payrollAmount = payrollRes.data.inHandSalary;
                     }
@@ -131,7 +132,8 @@ function DashboardEmployee() {
                 // Fetch upcoming birthdays
                 let birthdays = [];
                 try {
-                    const birthdaysRes = await axiosInstance.get('/api/v1/both/profile-details/upcoming-birthdays');
+                    // Use correct path (baseURL already includes /api)
+                    const birthdaysRes = await axiosInstance.get('/v1/both/profile-details/upcoming-birthdays');
                     if (birthdaysRes.data?.birthdays) {
                         birthdays = birthdaysRes.data.birthdays;
                     }
